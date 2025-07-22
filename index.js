@@ -1,10 +1,26 @@
-require('dotenv').config();              // only if you installed dotenv
+require('dotenv').config();           
+const fs = require('fs');
+const csv = require('csv-parser');
 const puppeteer = require('puppeteer');
 
 (async () => {
+    // 0. Load Domains from csv
+    const companies = [];
+    await new Promise((resolve, reject) => {
+        fs.createReadStream('companies.csv')
+            .pipe(csv())
+            .on('data', row => {
+                companies.push(row.domain.trim());
+            })
+            .on('end', () => resolve())
+            .on('error', reject);
+    });
+    
+    console.log(`Loaded ${companies.length} companies from CSV`);
+
     // 1. Launch browser
     const browser = await puppeteer.launch({
-    headless: false,                     // set to true once you’re comfortable
+    headless: false,                     
     defaultViewport: null,
     args: ['--start-maximized']
     });
@@ -19,23 +35,43 @@ const puppeteer = require('puppeteer');
     page.waitForNavigation({ waitUntil: 'networkidle2' })
     ]);
 
-    console.log('✅ Logged in!');
+    console.log('Logged in');
 
-    // --- from here you can start your search loop, clicks, scrapes, etc. ---
-    await page.type('input[placeholder="Search by company or domain name"]', 'Magic Spoon');
-    // Wait for the row to appear…
-    await page.waitForSelector('table tbody tr td a.text-indigo-600', { visible: true });
+    // 3. Loop over domains
+    const typeBoxSelector = 'input[placeholder="Search by company or domain name"]';
+    const linkSelector = 'table tbody tr td a.text-indigo-600';
+    const results = [];
 
-    // Then pull out the href
-    const importerUrl = await page.$eval(
-    'table tbody tr td a.text-indigo-600',
-    a => a.href
-    );
+    for (const domain of companies) {
+        await page.type(typeBoxSelector, domain);
+        try {
+            await page.waitForSelector(linkSelector, { visible: true, timeout: 10000 });
+            // Then pull out the href
+            const url = await page.$eval(linkSelector, a => a.href);
+            console.log('Importer detail URL:', url);
+            results.push({domain, url});
+        } catch {
+            console.log("No results")
+            results.push({domain, url:''});
+        }
 
-    console.log('Importer detail URL:', importerUrl);
+        await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2' });
 
-
+    }
     // 4. (For now) just close
     await browser.close();
+
+    // 5. Write results to CSV
+    const header = 'domain,url\n';
+    const csvLines = results
+    .map(r => {
+        // escape any quotes in the values
+        const d = r.domain.replace(/"/g, '""');
+        const u = r.url.replace(/"/g, '""');
+        return `"${d}","${u}"`;
+    })
+    .join('\n');
+    fs.writeFileSync('results.csv', header + csvLines);    
+
 })();
 
