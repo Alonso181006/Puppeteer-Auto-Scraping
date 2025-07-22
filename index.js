@@ -133,8 +133,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
             }
 
 
-            // Trade Lanes Scarpping
-
+            // Trade Lanes Scraping
             try {
                 await page.evaluate(() => {
                     const btnTL = [...(document.querySelectorAll("nav button"))]
@@ -147,6 +146,96 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
                 await page.waitForSelector(
                 'button[aria-controls*="Ocean Trade Lanes"]',{ timeout: 5000 });
+
+                // Ocean
+                try {
+                    await page.evaluate(() => {
+                        const btnOTS = document.querySelector('button[aria-controls*="Ocean Trade Lanes"]');   
+                        if (btnOTS.disabled) {
+                            throw new Error("Ocean Trade Lanes not active");
+                        }
+                    });
+                    await page.click('button[aria-controls*="Ocean Trade Lanes"]');
+                    
+                    await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
+
+                    // Scrape port + shipments per row
+                    const oceanManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
+                        rows => rows.map(row => {
+                            const tds = row.querySelectorAll('td');
+                            return {
+                                portOfLading: tds[0]?.textContent.trim() || null,
+                                shipments:    tds[2]?.textContent.trim() || null
+                            };
+                        })
+                    );
+
+                    console.log(oceanManifestRows);
+
+                    const combinedOMRows = Object.values(
+                        oceanManifestRows.reduce((acc, { portOfLading, shipments }) => {
+                            const count = parseInt(shipments, 10) || 0;
+                            if (!acc[portOfLading]) {
+                                // First time seeing this port
+                                acc[portOfLading] = { portOfLading, shipments: count };
+                            } else {
+                                // Add to existing total
+                                acc[portOfLading].shipments += count;
+                            }
+                            return acc;
+                        }, {})
+                    );
+
+                    console.log(combinedOMRows);
+
+                } catch (err) {
+                    console.warn(`Skipping Ocean Data from ${domain} because: ${err.message}`);
+                }
+
+                // Air
+                try {
+                    await page.evaluate(() => {
+                        const btnATS = document.querySelector('button[aria-controls*="Air Trade Lanes"]');   
+                        if (btnATS.disabled) {
+                            throw new Error("Air Trade Lanes not active");
+                        }
+                    });
+                    await page.click('button[aria-controls*="Air Trade Lanes"]');
+                    
+                    await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
+
+                    // Scrape port + shipments per row
+                    const airManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
+                        rows => rows.map(row => {
+                            const tds = row.querySelectorAll('td');
+                            return {
+                                portOfLading: tds[0]?.textContent.trim() || null,
+                                shipments:    tds[2]?.textContent.trim() || null
+                            };
+                        })
+                    );
+
+                    console.log(airManifestRows);
+
+                    const combinedAMRows = Object.values(
+                        airManifestRows.reduce((acc, { portOfLading, shipments }) => {
+                            const count = parseInt(shipments, 10) || 0;
+                            if (!acc[portOfLading]) {
+                                // First time seeing this port
+                                acc[portOfLading] = { portOfLading, shipments: count };
+                            } else {
+                                // Add to existing total
+                                acc[portOfLading].shipments += count;
+                            }
+                            return acc;
+                        }, {})
+                    );
+
+                    console.log(combinedAMRows);
+
+                } catch (err) {
+                    console.warn(`Skipping Air Data from ${domain} because: ${err.message}`);
+                }
 
             } catch (err) {
                 console.warn(`Skipping Scraping Trade Lanes Data from ${domain} because: ${err.message}`);
