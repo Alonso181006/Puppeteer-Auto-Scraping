@@ -2,8 +2,22 @@ require('dotenv').config();
 const fs = require('fs');
 const csv = require('csv-parser');
 const puppeteer = require('puppeteer');
+const { OpenAI } = require("openai");
+
+const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
+
 
 (async () => {
+    // -1. OpenAI Setup
+    const chatCompletion = await openAIClient.chat.completions.create({
+        model : "gpt-4.1-nano",
+        messages : [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user",  content: "Hello!" }
+        ]
+    });
+
+
     // 0. Load Domains from csv
     const companies = [];
     await new Promise((resolve, reject) => {
@@ -64,12 +78,12 @@ const puppeteer = require('puppeteer');
             // Summary Scraping
             try {
                 await page.evaluate(() => {
-                    const sp = [...(document.querySelectorAll("nav button"))]
+                    const btnS = [...(document.querySelectorAll("nav button"))]
                         .find(b => b.textContent.trim() === "Summary");
-                    if (!sp) {
+                    if (!btnS) {
                         throw new Error("Summary button not found");
                     }
-                    sp.click();
+                    btnS.click();
                 });
 
                 await page.waitForSelector(
@@ -77,8 +91,8 @@ const puppeteer = require('puppeteer');
 
                 try {
                     await page.evaluate(() => {
-                        const btnCs = document.querySelector('button[aria-controls*="Clearance Summary"]');   
-                        if (btnCs.disabled) {
+                        const btnCS = document.querySelector('button[aria-controls*="Clearance Summary"]');   
+                        if (btnCS.disabled) {
                             throw new Error("Clearance Summary not active");
                         }
                     });
@@ -100,8 +114,8 @@ const puppeteer = require('puppeteer');
                 }
 
                 await page.evaluate(() => {
-                    const btnCs = document.querySelector('button[aria-controls*="Ocean Manifest Summary"]');   
-                    if (btnCs.disabled) {
+                    const btnOMS = document.querySelector('button[aria-controls*="Ocean Manifest Summary"]');   
+                    if (btnOMS.disabled) {
                         throw new Error("Ocean Manifest Summary not active");
                     }
                 });
@@ -118,15 +132,35 @@ const puppeteer = require('puppeteer');
                 console.warn(`Skipping Scraping Summary Data from ${domain} because: ${err.message}`);
             }
 
+
+            // Trade Lanes Scarpping
+
+            try {
+                await page.evaluate(() => {
+                    const btnTL = [...(document.querySelectorAll("nav button"))]
+                        .find(b => b.textContent.trim() === "Trade Lanes");
+                    if (!btnTL) {
+                        throw new Error("Trade Lanes button not found");
+                    }
+                    btnTL.click();
+                });
+
+                await page.waitForSelector(
+                'button[aria-controls*="Ocean Trade Lanes"]',{ timeout: 5000 });
+
+            } catch (err) {
+                console.warn(`Skipping Scraping Trade Lanes Data from ${domain} because: ${err.message}`);
+            }
+
             // Service Providers Scraping
             try {
                 await page.evaluate(() => {
-                    const sp = [...(document.querySelectorAll("nav button"))]
+                    const btnSP = [...(document.querySelectorAll("nav button"))]
                         .find(b => b.textContent.trim() === "Service Providers");
-                    if (!sp) {
+                    if (!btnSP) {
                         throw new Error("Service Providers button not found");
                     }
-                    sp.click();
+                    btnSP.click();
                 });
 
                 // Should Have the button always if the Sp Btn found
@@ -134,8 +168,8 @@ const puppeteer = require('puppeteer');
                 'button[aria-controls*="Customs Brokers"]',{ timeout: 5000 });
 
                 await page.evaluate(() => {
-                    const cb = document.querySelector('button[aria-controls*="Customs Brokers"]');   
-                    if (cb.disabled ) {
+                    const btnCB = document.querySelector('button[aria-controls*="Customs Brokers"]');   
+                    if (btnCB.disabled ) {
                         throw new Error("Customs button not active");
                     }
                 });
