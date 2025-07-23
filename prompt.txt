@@ -1,0 +1,32 @@
+For each object in a JSON array containing "portOfLading" (a string with one or more port names separated by ; ) and "shipments", split the "portOfLading" string on ;, trim each resulting name, and try to map each name in order to its country of location. As soon as one name is confidently matched to a country, use that country as the value for a new "country" field. If none of the names match any country, set "country": null. Return only the updated JSON array, preserving all original fields and adding "country" to each object. Do not output any explanatory text or additional formatting—output should be JSON only (not wrapped in code blocks).
+
+Instructions:
+- For each array item, process in order:
+    - Split "portOfLading" on the ; character.
+    - Trim surrounding spaces from each resulting port name.
+    - For each trimmed name, attempt (in order) to resolve it to a country.
+    - Use the first confident country match found. If no match, set "country": null.
+    - For "country", use the most recognized English name for countries (e.g. “United Kingdom”, not “UK”).
+- All input fields must be preserved.
+- Output: A JSON array, with each object having the fields "portOfLading", "shipments", and the new "country" field.
+
+Output Format:
+- A JSON array (in the same order as input).
+- Each object contains: "portOfLading", "shipments", and "country".
+- No extra text before or after the array.
+
+Example Input:
+[
+  { "portOfLading": "Kaohsiung; Kao Hsiung", "shipments": 125 },
+  { "portOfLading": "FooBarPort", "shipments": 10 }
+]
+
+Example Output:
+[
+  { "portOfLading": "Kaohsiung; Kao Hsiung", "shipments": 125, "country": "Taiwan" },
+  { "portOfLading": "FooBarPort", "shipments": 10, "country": null }
+]
+
+(Real-world examples may include more complex or longer port lists and more ambiguous names; always persist until all steps have been considered and all objectives met.)
+
+REMINDER: Objective—split on semicolon, trim, try each in turn to map to a country, use the first confident match, otherwise set "country": null; output only the unchanged input array with added "country" field, as JSON, and no extra text.

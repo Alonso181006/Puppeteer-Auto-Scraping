@@ -3,19 +3,17 @@ const fs = require('fs');
 const csv = require('csv-parser');
 const puppeteer = require('puppeteer');
 const { OpenAI } = require("openai");
+const path = require('path');
+
 
 const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
 
 (async () => {
-    // -1. OpenAI Setup
-    const chatCompletion = await openAIClient.chat.completions.create({
-        model : "gpt-4.1-nano",
-        messages : [
-            { role: "system", content: "You are a helpful assistant." },
-            { role: "user",  content: "Hello!" }
-        ]
-    });
+    // -1. Prompt Setup
+
+    const promptPath = path.join(__dirname, 'prompt.txt');
+    const systemPrompt = fs.readFileSync(promptPath, 'utf-8');
 
 
     // 0. Load Domains from csv
@@ -147,6 +145,9 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 await page.waitForSelector(
                 'button[aria-controls*="Ocean Trade Lanes"]',{ timeout: 5000 });
 
+                let airManifestRows = [];
+                let oceanManifestRows = [];
+
                 // Ocean
                 try {
                     await page.evaluate(() => {
@@ -160,7 +161,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                     await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
 
                     // Scrape port + shipments per row
-                    const oceanManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
+                    oceanManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
                         rows => rows.map(row => {
                             const tds = row.querySelectorAll('td');
                             return {
@@ -171,22 +172,6 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                     );
 
                     console.log(oceanManifestRows);
-
-                    const combinedOMRows = Object.values(
-                        oceanManifestRows.reduce((acc, { portOfLading, shipments }) => {
-                            const count = parseInt(shipments, 10) || 0;
-                            if (!acc[portOfLading]) {
-                                // First time seeing this port
-                                acc[portOfLading] = { portOfLading, shipments: count };
-                            } else {
-                                // Add to existing total
-                                acc[portOfLading].shipments += count;
-                            }
-                            return acc;
-                        }, {})
-                    );
-
-                    console.log(combinedOMRows);
 
                 } catch (err) {
                     console.warn(`Skipping Ocean Data from ${domain} because: ${err.message}`);
@@ -205,7 +190,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                     await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
 
                     // Scrape port + shipments per row
-                    const airManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
+                    airManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
                         rows => rows.map(row => {
                             const tds = row.querySelectorAll('td');
                             return {
@@ -217,25 +202,47 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
                     console.log(airManifestRows);
 
-                    const combinedAMRows = Object.values(
-                        airManifestRows.reduce((acc, { portOfLading, shipments }) => {
-                            const count = parseInt(shipments, 10) || 0;
-                            if (!acc[portOfLading]) {
-                                // First time seeing this port
-                                acc[portOfLading] = { portOfLading, shipments: count };
-                            } else {
-                                // Add to existing total
-                                acc[portOfLading].shipments += count;
-                            }
-                            return acc;
-                        }, {})
-                    );
-
-                    console.log(combinedAMRows);
-
                 } catch (err) {
                     console.warn(`Skipping Air Data from ${domain} because: ${err.message}`);
                 }
+
+                const allRows = [...airManifestRows, ...oceanManifestRows];
+
+                const combinedRows = Object.values(
+                    allRows.reduce((acc, { portOfLading, shipments }) => {
+                        const count = parseInt(shipments, 10) || 0;
+                        if (!acc[portOfLading]) {
+                            // First time seeing this port
+                            acc[portOfLading] = { portOfLading, shipments: count };
+                        } else {
+                            // Add to existing total
+                            acc[portOfLading].shipments += count;
+                        }
+                        return acc;
+                    }, {})
+                );
+
+                console.log(combinedRows);
+                const tradeData = JSON.stringify(combinedRows, null, 2);
+                console.log(tradeData)
+
+                console.log("before chat")
+
+                const chatCompletion = await openAIClient.chat.completions.create({
+                    model : "gpt-4.1-nano",
+                    messages : [
+                        { role: "system", content: systemPrompt },
+                        { role: "user",  content: tradeData }
+                    ]
+                });
+
+                const reply = chatCompletion.choices[0].message.content.trim();
+                const enriched = JSON.parse(reply);
+
+                console.log(enriched);
+
+                console.log("after chat")
+
 
             } catch (err) {
                 console.warn(`Skipping Scraping Trade Lanes Data from ${domain} because: ${err.message}`);
