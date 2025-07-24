@@ -1,13 +1,9 @@
-company_name,domain
-Waggle,getyourwaggleon.com
-Walmart,walmart.com
-Target,target.com
-Tesla,tesla.com
-Apple,apple.com
-General Motors,gm.com
-Ford,ford.com
-Chrysler,chrysler.com
-Boeing,boeing.com
-Honda,honda.com
-Nike,nike.com
-Fake, edfghuehduiefh.com
+company_name,domain,legal_name
+Waggle,getyourwaggleon.com,Waggle Golf LLC
+Walmart,walmart.com,Walmart Inc.
+Target,target.com,Target Corporation
+Ford,ford.com,Ford Motor Company
+Boeing,boeing.com,The Boeing Company
+Honda,honda.com,American Honda Motor Co., Inc.
+Nike,nike.com,Nike, Inc.
+Fake,edfghuehduiefh.com, Fake Inc.

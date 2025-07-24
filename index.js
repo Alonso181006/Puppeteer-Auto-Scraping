@@ -10,10 +10,13 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
 
 (async () => {
-    // -1. Prompt Setup
+    // -1. External Files Setup
 
     const promptPath = path.join(__dirname, 'prompt.txt');
     const systemPrompt = fs.readFileSync(promptPath, 'utf-8');
+    const portsPath = path.join(__dirname, 'ports_mapping.json')
+    const rawJSonPorts = fs.readFileSync(portsPath, 'utf-8');
+    const portCountryMap = JSON.parse(rawJSonPorts);
 
 
     // 0. Load Domains from csv
@@ -22,7 +25,11 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
         fs.createReadStream('companies.csv')
             .pipe(csv())
             .on('data', row => {
-                companies.push(row.domain.trim());
+                companies.push({
+                    companyName: row.company_name?.trim() || "No Results On Clay",
+                    domain: row.domain?.trim() || "No Results On Clay",
+                    legalName: row.legal_name?.trim() || "No Results On Clay",
+                });
             })
             .on('end', () => resolve())
             .on('error', reject);
@@ -53,23 +60,43 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     const typeBoxSelector = 'input[placeholder="Search by company or domain name"]';
     const linkSelector = 'table tbody tr td a.text-indigo-600';
     const results = [];
-    let url = '';
 
-    for (const domain of companies) {
+    for (let i = 0; i < companies.length; i++) {
+        const { domain, companyName, legalName } = companies[i];
+
+        let url = '';
+        let customsBrokersStr = "";
+        let totalShipments;
+        let totalClearances;
+        let tradeDataStr = "";
+        let portTypeStr = "";
+
+        // Domain Check
+        await clearAndType(page, typeBoxSelector, domain);
+        url = await getImporterDetailURL(page, linkSelector);
         
-        await page.type(typeBoxSelector, domain);
-        try {
-            await page.waitForSelector(linkSelector, { visible: true, timeout: 10000 });
-            // Then pull out the href
-            url = await page.$eval(linkSelector, a => a.href);
-            console.log('Importer detail URL:', url);
-            results.push({domain, url});
-        } catch {
-            console.log("No results")
-            results.push({domain, url});
+        const searchVariants = [legalName, companyName, companyName.replace(/\s+/g, ''), legalName.replace(/\s+/g, '')];
+        if (!url) {
+            await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2' });
+
+            for (const term of searchVariants) {
+                // if (url) break; // Already found a match
+                await clearAndType(page, typeBoxSelector, term);
+                url = await getImporterDetailURL(page, linkSelector);
+            }
+        }        
+
+        if (!url) {
+            await page.goto('https://app.revenuevessel.com/dashboard/importers?companyNameSearchStrategy=Fuzzy&', { waitUntil: 'networkidle2' });
+
+            for (const term of searchVariants) {
+                if (url) break; // Already found a match
+                await clearAndType(page, typeBoxSelector, term);
+                url = await getImporterDetailURL(page, linkSelector);
+            }
         }
 
-        if(url != '') {
+        if(url) {
             await page.goto(url, { waitUntil: 'networkidle2' });
             await page.waitForSelector("nav button", { timeout: 5000 });
 
@@ -83,6 +110,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                     }
                     btnS.click();
                 });
+
 
                 await page.waitForSelector(
                 'button[aria-controls*="Clearance Summary"]',{ timeout: 5000 });
@@ -100,7 +128,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                     await page.waitForSelector('div[data-state="active"] dd.text-gray-900',
                     { visible: true, timeout: 5000 });
 
-                    const totalClearances = await page.$eval(
+                    totalClearances = await page.$eval(
                     'div[data-state="active"] dd.text-gray-900',
                     el => el.textContent.trim()
                     );
@@ -122,7 +150,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 await page.waitForSelector('div[data-state="active"] dd.text-gray-900', { visible: true, timeout: 5000 });
 
                 // 2. Grab the first such <dd>
-                const totalShipments = await page.$eval(
+                totalShipments = await page.$eval(
                 'div[data-state="active"] dd.text-gray-900',dd => dd.textContent.trim());
                 console.log('Total Shipments:', totalShipments);``
 
@@ -147,102 +175,85 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
                 let airManifestRows = [];
                 let oceanManifestRows = [];
+                let portType = [];
 
                 // Ocean
-                try {
-                    await page.evaluate(() => {
-                        const btnOTS = document.querySelector('button[aria-controls*="Ocean Trade Lanes"]');   
-                        if (btnOTS.disabled) {
-                            throw new Error("Ocean Trade Lanes not active");
-                        }
-                    });
-                    await page.click('button[aria-controls*="Ocean Trade Lanes"]');
-                    
-                    await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
-
-                    // Scrape port + shipments per row
-                    oceanManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
-                        rows => rows.map(row => {
-                            const tds = row.querySelectorAll('td');
-                            return {
-                                portOfLading: tds[0]?.textContent.trim() || null,
-                                shipments:    tds[2]?.textContent.trim() || null
-                            };
-                        })
-                    );
-
-                    console.log(oceanManifestRows);
-
-                } catch (err) {
-                    console.warn(`Skipping Ocean Data from ${domain} because: ${err.message}`);
-                }
-
+                oceanManifestRows = await getTradeLanesData(page, "Ocean Trade Lanes", domain, 0,2);
                 // Air
-                try {
-                    await page.evaluate(() => {
-                        const btnATS = document.querySelector('button[aria-controls*="Air Trade Lanes"]');   
-                        if (btnATS.disabled) {
-                            throw new Error("Air Trade Lanes not active");
-                        }
-                    });
-                    await page.click('button[aria-controls*="Air Trade Lanes"]');
-                    
-                    await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
-
-                    // Scrape port + shipments per row
-                    airManifestRows = await page.$$eval('div[data-state="active"] table tbody tr',
-                        rows => rows.map(row => {
-                            const tds = row.querySelectorAll('td');
-                            return {
-                                portOfLading: tds[0]?.textContent.trim() || null,
-                                shipments:    tds[2]?.textContent.trim() || null
-                            };
-                        })
-                    );
-
-                    console.log(airManifestRows);
-
-                } catch (err) {
-                    console.warn(`Skipping Air Data from ${domain} because: ${err.message}`);
-                }
+                airManifestRows = await getTradeLanesData(page, "Air Trade Lanes", domain, 0,2);
+                // Port Type
+                portType = await getTradeLanesData(page, "Destination Ports", domain, 1, 2);
 
                 const allRows = [...airManifestRows, ...oceanManifestRows];
 
-                const combinedRows = Object.values(
-                    allRows.reduce((acc, { portOfLading, shipments }) => {
-                        const count = parseInt(shipments, 10) || 0;
-                        if (!acc[portOfLading]) {
-                            // First time seeing this port
-                            acc[portOfLading] = { portOfLading, shipments: count };
-                        } else {
-                            // Add to existing total
-                            acc[portOfLading].shipments += count;
+                let combinedRows = await combinedSamePorts(allRows);
+                let portTypeCombined = await combinedSamePorts(portType);
+
+                portTypeStr = await sortStringifyArray(portTypeCombined, 'port', 'shipments', false);
+                console.log(portTypeStr);
+
+                // console.log(combinedRows);
+
+                // Finding Country of Port of Lading 
+                let foundCities = [];
+                let missingCities = [];
+
+                for (data of combinedRows) {
+                    const possibleNames = data.port.split(";").map(name => name.trim());
+                    let found = false;
+                    for (const name of possibleNames) {
+                        if (portCountryMap[name]) {
+                            data.country = portCountryMap[name];
+                            found = true;
+                            break;
                         }
-                        return acc;
-                    }, {})
-                );
+                    }
+                    if (found) {
+                        foundCities.push(data);
+                    } else {
+                        missingCities.push(data);
+                    }
+                }
+                let enriched = [];
 
-                console.log(combinedRows);
-                const tradeData = JSON.stringify(combinedRows, null, 2);
-                console.log(tradeData)
+                console.log("Found Cities:", foundCities)
+                console.log("Missing Cities:", missingCities)
 
-                console.log("before chat")
 
-                const chatCompletion = await openAIClient.chat.completions.create({
-                    model : "gpt-4.1-nano",
-                    messages : [
-                        { role: "system", content: systemPrompt },
-                        { role: "user",  content: tradeData }
-                    ]
-                });
+                if (missingCities.length > 0) {
 
-                const reply = chatCompletion.choices[0].message.content.trim();
-                const enriched = JSON.parse(reply);
+                    const enrichData = JSON.stringify(missingCities, null, 2);
+                    console.log("before chat")
 
-                console.log(enriched);
+                    const chatCompletion = await openAIClient.chat.completions.create({
+                        model : "gpt-4.1-nano",
+                        messages : [
+                            { role: "system", content: systemPrompt },
+                            { role: "user",  content: enrichData }
+                        ]
+                    });
 
-                console.log("after chat")
+                    const reply = chatCompletion.choices[0].message.content.trim();
+                    enriched = JSON.parse(reply).concat(foundCities);
 
+                    console.log("after chat");
+                } else {
+                    enriched = foundCities;
+                }
+
+                const combinedByCountry = enriched.reduce((acc, { country, shipments }) => {
+                    if (!country) return acc; // skip if country is null
+                    acc[country] = (acc[country] || 0) + shipments; // add to existing or start at 0
+                    return acc;
+                }, {});
+
+                let tradeData = Object.entries(combinedByCountry).map(([country, shipments]) => ({
+                    country,
+                    shipments
+                }));
+
+                tradeDataStr = await sortStringifyArray(tradeData, 'country', 'shipments', true);
+                console.log("Result: ", tradeDataStr);
 
             } catch (err) {
                 console.warn(`Skipping Scraping Trade Lanes Data from ${domain} because: ${err.message}`);
@@ -272,44 +283,139 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
                 await page.click('button[aria-controls*="Customs Brokers"]');
 
-                // Scrape Customs Broker Name & #
+                // Scrape Customs Broker Name and Number
                 await page.waitForSelector('div[data-state="active"] table tbody tr',{ timeout: 5000 });
 
-                const { name, total } = await page.evaluate(() => {
-                    const row = document.querySelector('div[data-state="active"] table tbody tr');
-                    if (!row) throw new Error("No data row found");
+                let customsBrokers = await page.evaluate(() => {
+                    const rows = document.querySelectorAll('div[data-state="active"] table tbody tr');
+                    if (!rows) throw new Error("No data row found");
 
-                    const nameCell = row.querySelector('td a');
-                    const name = nameCell ? nameCell.textContent.trim() : null;
+                    return [...rows].map(row => {
+                        const nameCell = row.querySelector('td a');
+                        const name = nameCell ? nameCell.textContent.trim() : null;
 
-                    const totalCell = row.querySelector('td:nth-child(2)');
-                    const total = totalCell ? totalCell.textContent.trim() : null;
+                        const totalCell = row.querySelector('td:nth-child(2)');
+                        const total = totalCell ? totalCell.textContent.trim() : null;
 
-                    return { name, total };
+                        return { name, total };
+                    })
                 });
 
-                console.log("Name:", name);   
-                console.log("Total:", total); 
+                sortStringifyArray(customsBrokers, 'name', 'total', true);
+
+                console.log(customsBrokersStr);
             } catch (err) {
                 console.warn(`Skipping Scraping Customs Data from ${domain} because: ${err.message}`);
             }
         }
-            await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2' });
-        }
+        console.log("Hello")
+        console.log(companyName, url, totalClearances, totalShipments, customsBrokersStr, tradeDataStr, portTypeStr);
+        results.push({companyName, url, totalClearances, totalShipments, customsBrokersStr, tradeDataStr, portTypeStr});
+        await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2' });
+    }
     // 4. (For now) just close
     await browser.close();
 
     // 5. Write results to CSV
-    const header = 'domain,url\n';
-    const csvLines = results
-    .map(r => {
-        // escape any quotes in the values
-        const d = r.domain.replace(/"/g, '""');
-        const u = r.url.replace(/"/g, '""');
-        return `"${d}","${u}"`;
-    })
-    .join('\n');
-    fs.writeFileSync('results.csv', header + csvLines);    
+    const header = 'Name,Url,Total Customs Clearances,Total Shipments,Customs Broker,Trade Data, Port Type\n';
+
+    const csvLines = results.map(r => {
+        const name = (r?.companyName || '').toString().replace(/"/g, '""');
+        const url = (r?.url || '').toString().replace(/"/g, '""');
+
+        const totalClearances = (r?.totalClearances || '').toString().replace(/,/g, '').replace(/"/g, '""');
+
+        const totalShipments = (r?.totalShipments || '').toString().replace(/,/g, '').replace(/"/g, '""');
+
+        const customsBroker = (r?.customsBrokersStr || '').replace(/"/g, '""');
+
+        const tradeData = (r?.tradeDataString || '').replace(/"/g, '""');
+
+        const portTypeData = (r?.portTypeStr || '').replace(/"/g, '""');
+
+
+    return `"${name}","${url}",${totalClearances},${totalShipments},"${customsBroker}","${tradeData}", "${portTypeData}"`;
+    });
+
+    fs.writeFileSync('results.csv', header + csvLines.join('\n'));
 
 })();
 
+async function clearAndType(page, selector, value) {
+  await page.click(selector, { clickCount: 3 });
+  await page.keyboard.press('Backspace');
+  console.log(value);
+  await page.type(selector, value);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+async function getImporterDetailURL(page, selector) {
+  try {
+    await page.waitForSelector(selector, { visible: true, timeout: 5000 });
+    const url = await page.$eval(selector, a => a.href);
+    console.log('Importer detail URL:', url);
+    return url;
+  } catch {
+    console.log("No results");
+    return url = '';
+  }
+}
+
+
+async function getTradeLanesData(activePage, tab, domain, column1, column2) {
+    try {
+        await activePage.evaluate((tabName) => {
+            const btn = document.querySelector(`button[aria-controls*="${tabName}"]`);
+            if (!btn || btn.disabled) {
+                throw new Error(tabName + " not active");
+            }
+        }, tab);
+        await activePage.click(`button[aria-controls*="${tab}"]`);
+        
+        await activePage.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
+
+        // Scrape port + shipments per row
+        const scrapedRows = await activePage.$$eval('div[data-state="active"] table tbody tr',
+            (rows, col1, col2) => rows.map(row => {
+                const tds = row.querySelectorAll('td');
+                return {
+                    port: tds[col1]?.textContent.trim() || null,
+                    shipments:    tds[col2]?.textContent.trim() || null
+                };
+            }), 
+            column1, column2
+        );
+        // console.log(airManifestRows);
+        return scrapedRows;
+
+    } catch (err) {
+        console.warn(`Skipping ${tab} from ${domain} because: ${err.message}`);
+        return [];
+    }
+}
+
+async function combinedSamePorts(array) {
+    return Object.values(
+        array.reduce((acc, { port, shipments }) => {
+            const count = parseInt(shipments, 10) || 0;
+            if (!acc[port]) {
+                // First time seeing this port
+                acc[port] = { port, shipments: count };
+            } else {
+                // Add to existing total
+                acc[port].shipments += count;
+            }
+            return acc;
+        }, {})
+    );
+}
+
+async function sortStringifyArray(inputArray, key1, key2, notportType) {
+    inputArray.sort((a, b) => b[key2] - a[key2]);
+    const num = (inputArray.length >= 3 && notportType) ? 3: inputArray.length
+    return inputArray.slice(0, num).map(entry => {
+        const label = entry[key1] || '';
+        const value = entry[key2] || '';
+        return `${label}-${value}`;
+    }).join(', ');
+}
