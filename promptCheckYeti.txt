@@ -1,0 +1,59 @@
+Compare two companies—given the full details (name, domain, legal name, and location) of the first company and only the name and location of the second—to determine, using both logical reasoning and current web/online research (as if you had access to browsing tools or search engines, like ChatGPT with active browsing), whether they are the same company with at least 90% confidence. Explicitly include steps to search for up-to-date or recent evidence (e.g. searching online for company addresses, alternate locations, and name variations) as a normal user of an AI with search functionality would perform.
+
+Evaluate possible relationships even if locations differ (such as headquarters versus branch or manufacturer), checking if the second location plausibly belongs to the same corporate entity based on evidence you can find or deduce from the web. Only output 'true' if you are over 90% sure they represent the same organization; otherwise output 'false'.
+
+# Steps
+
+1. Analyze and compare both names, domain, legal name, and locations provided.
+2. If locations differ, consider plausible scenarios (HQ vs. local office, manufacturing, etc.) and search for direct evidence linking both locations to the same company.
+3. Actively consult current web sources (company websites, directories, recent online information) to check for:
+    - Multiple locations/offices
+    - Variations in names/branding associated with both addresses
+    - Legal structure or unique attributes
+4. Reason about all gathered evidence, weighing similarities vs differences.
+5. Only if you reach at least 90% confidence from both logical analysis and search-based evidence, output 'true'; otherwise output 'false'.
+6. All reasoning and search findings must appear before the conclusion in your output, with each logical chain-thought and finding clearly explained before you state your decision.
+7. Never start with a conclusion or boolean value; end with the boolean only.
+
+# Output Format
+
+Output strictly as a JSON object with two fields:
+- "reasoning": a concise but detailed paragraph outlining step-by-step reasoning, including what was found from current/recent online sources or searches.
+- "same_company": a boolean value; true only if you are >=90% confident, else false.
+
+Never output explanations or text outside the JSON format.
+
+# Examples
+
+Example 1:
+Input:
+- company1: Waggle, getyourwaggleon.com, Waggle Golf LLC, "Minneapolis, MN"
+- company2: Waggle Golf United States, 1973 County Road C2 W, Saint Paul, Mn 55113, Us
+
+Output:
+{
+  "reasoning": "By searching the web for 'Waggle Golf Minneapolis' and reviewing their website getyourwaggleon.com, I found Waggle Golf LLC operates out of Minneapolis with regionally close branches. The Saint Paul address listed for 'Waggle Golf United States' appears on retail and company distributor listings. Company name, domain, legal structure, and nearby locations all match, supporting the idea that Saint Paul is a branch or distribution point for the Minneapolis headquarters. My search found no evidence of unrelated entities with these attributes in Minnesota, so my confidence is above 90% that these are the same company.",
+  "same_company": true
+}
+
+Example 2:
+Input:
+- company1: GoldenWest Lubricants, www.gwlinc.com, GoldenWest Lubricants, Inc., "Pomona, CA"
+- company2: Lda Inc United States, Guaynabo, Pr 00969, Us
+
+Output:
+{
+  "reasoning": "A web search for 'Lda Inc United States Guaynabo' and 'GoldenWest Lubricants Pomona' finds no connections between these companies. Their names are different, and their locations are in different states—California and Puerto Rico. No recent web, directory, or business filings suggest any relationship, nor do their industries overlap. Based on this, my confidence that they are the same company is well below 90%.",
+  "same_company": false
+}
+
+(Guideline: Real-life cases may require longer reasoning and complex searching; substitute [company details] where applicable.)
+
+# Notes
+
+- Always base your findings both on logical analysis and any recent or web-search-available evidence, as if you have browsing capability.
+- Wherever possible, reference findings from real-time web lookup, official company pages, or reputable directories.
+- Output only JSON with the required fields. Do not include additional explanations or surrounding text.
+- Do not begin your output with a conclusion; start with your full reasoning process and evidence.
+
+Reminder: Your objective is to combine logical analysis of the data provided with active consultation of up-to-date online information, reporting your full reasoning chain before ever stating your final answer. Only output the conclusion at the very end and only if you are 90% or more confident in your assessment.

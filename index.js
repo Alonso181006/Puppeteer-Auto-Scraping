@@ -14,8 +14,10 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 (async () => {
     // -1. External Files Setup
 
-    const promptPath = path.join(__dirname, 'prompt.txt');
-    const systemPrompt = fs.readFileSync(promptPath, 'utf-8');
+    const countryPromptPath = path.join(__dirname, 'promptFindCountry.txt');
+    const promptYetiPath = path.join(__dirname, 'promptCheckYeti.txt');
+    const countryPrompt = fs.readFileSync(countryPromptPath, 'utf-8');
+    const yetiPrompt = fs.readFileSync(promptYetiPath, 'utf-8');
     const portsPath = path.join(__dirname, 'ports_mapping.json')
     const rawJSonPorts = fs.readFileSync(portsPath, 'utf-8');
     const portCountryMap = JSON.parse(rawJSonPorts);
@@ -85,6 +87,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
         let totalClearances;
         let tradeDataStr = "";
         let portTypeStr = "";
+        let textData = [];
 
         // Domain Check
         await clearAndType(page, typeBoxRV, domain);
@@ -239,12 +242,11 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 if (missingCities.length > 0) {
 
                     const enrichData = JSON.stringify(missingCities, null, 2);
-                    console.log("before chat")
 
                     const chatCompletion = await openAIClient.chat.completions.create({
                         model : "gpt-4.1-nano",
                         messages : [
-                            { role: "system", content: systemPrompt },
+                            { role: "system", content: countryPrompt },
                             { role: "user",  content: enrichData }
                         ]
                     });
@@ -252,7 +254,6 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                     const reply = chatCompletion.choices[0].message.content.trim();
                     enriched = JSON.parse(reply).concat(foundCities);
 
-                    console.log("after chat");
                 } else {
                     enriched = foundCities;
                 }
@@ -331,9 +332,24 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
             if (urlYeti) break; // Already found a match
             await clearAndType(page, typeBoxYeti, term);
             await page.click('button[aria-label="Search button"]', {timeout: 10000});
-            urlYeti = await findYetiLink(page);
-            console.log("Url:", urlYeti)
+            ({url:urlYeti, textData} = await findYetiLink(page));
+            console.log("Url:", urlYeti);
+            console.log("Data:", textData)
             await new Promise(resolve => setTimeout(resolve, 2000));
+
+        }
+
+        if (urlYeti) {
+            const chatCompletion = await openAIClient.chat.completions.create({
+                model : "gpt-4.1-nano",
+                messages : [
+                    { role: "system", content: yetiPrompt },
+                    { role: "user",  content: textData.slice(0,2).join('\n') }
+                ]
+            });
+
+            const reply = chatCompletion.choices[0].message.content.trim();
+            if (!JSON.parse(reply).same_company) urlYeti = "";
 
         }
 
@@ -450,14 +466,41 @@ async function sortStringifyArray(inputArray, key1, key2, notportType) {
 async function findYetiLink(page) {
     try {
         await page.waitForSelector('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', { visible: true, timeout: 5000 });
-        return await page.$$eval('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', companies => {
+        const {url, textData} = await page.$$eval('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', companies => {
             const match = companies.find(company => company.closest("div")?.querySelector(".fflag.ff-sm.fflag-US"));
-            if (!match) return '';
+            if (!match) return {url:'', textData: []};
             const anchor = match.querySelector("a[href]");
-            return anchor ? anchor.href : '';
+            const url =  anchor ? anchor.href : '';
+
+            const rawData = [...match.closest("div")?.querySelectorAll('.relative.w-full')];
+            const textData = rawData.map(el => {
+                return el.textContent.trim();
+            });
+
+            return {url, textData};
+
         });
+
+        if (await isDateRecent(textData)){
+            return {url, textData};
+        } else {
+            return {url:'', textData: []};
+        }
     } catch (err) {
         console.log("No results:", err.message); 
-        return '';
+        return {url:'', textData: []};
     }
+}
+
+
+async function isDateRecent(textData) {
+    const shipmentLine = textData[2]; 
+    const dateMatch = shipmentLine.match(/(\d{2}\/\d{2}\/\d{4})/);
+
+    if (dateMatch) {
+        const shipmentDate = new Date(dateMatch[1]);
+        const cutoff = new Date("01/01/2025");
+        return (shipmentDate >= cutoff);
+    }
+    return false;
 }
