@@ -16,9 +16,9 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
     const countryPromptPath = path.join(__dirname, 'promptFindCountry.txt');
     const promptYetiPath = path.join(__dirname, 'promptCheckYeti.txt');
+    const portsPath = path.join(__dirname, 'ports_mapping.json')
     const countryPrompt = fs.readFileSync(countryPromptPath, 'utf-8');
     const yetiPrompt = fs.readFileSync(promptYetiPath, 'utf-8');
-    const portsPath = path.join(__dirname, 'ports_mapping.json')
     const rawJSonPorts = fs.readFileSync(portsPath, 'utf-8');
     const portCountryMap = JSON.parse(rawJSonPorts);
 
@@ -26,13 +26,14 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     // 0. Load Domains from csv
     const companies = [];
     await new Promise((resolve, reject) => {
-        fs.createReadStream('companies.csv')
+        fs.createReadStream('clay10CompaniesTest.csv')
             .pipe(csv())
             .on('data', row => {
                 companies.push({
                     companyName: row.company_name?.trim() || "No Results On Clay",
                     domain: row.domain?.trim() || "No Results On Clay",
                     legalName: row.legal_name?.trim() || "No Results On Clay",
+                    location: row.hq_location?.trim() || "No Results On Clay"
                 });
             })
             .on('end', () => resolve())
@@ -78,7 +79,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     const results = [];
 
     for (let i = 0; i < companies.length; i++) {
-        const { domain, companyName, legalName } = companies[i];
+        const { domain, companyName, legalName, location } = companies[i];
 
         let urlRV = "";
         let urlYeti = "";
@@ -117,7 +118,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
         if(urlRV) {
             await page.goto(urlRV, { waitUntil: 'networkidle2' });
-            await page.waitForSelector("nav button", { timeout: 5000 });
+            await page.waitForSelector("nav button", { timeout: 3000 });
 
             // Summary Scraping
             try {
@@ -132,7 +133,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
 
                 await page.waitForSelector(
-                'button[aria-controls*="Clearance Summary"]',{ timeout: 5000 });
+                'button[aria-controls*="Clearance Summary"]',{ timeout: 3000 });
 
                 try {
                     await page.evaluate(() => {
@@ -145,7 +146,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
                     // Scrape Total Clearances
                     await page.waitForSelector('div[data-state="active"] dd.text-gray-900',
-                    { visible: true, timeout: 5000 });
+                    { visible: true, timeout: 3000 });
 
                     totalClearances = await page.$eval(
                     'div[data-state="active"] dd.text-gray-900',
@@ -166,7 +167,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 });
                 await page.click('button[aria-controls*="Ocean Manifest Summary"]');
 
-                await page.waitForSelector('div[data-state="active"] dd.text-gray-900', { visible: true, timeout: 5000 });
+                await page.waitForSelector('div[data-state="active"] dd.text-gray-900', { visible: true, timeout: 3000 });
 
                 // 2. Grab the first such <dd>
                 totalShipments = await page.$eval(
@@ -190,7 +191,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 });
 
                 await page.waitForSelector(
-                'button[aria-controls*="Ocean Trade Lanes"]',{ timeout: 5000 });
+                'button[aria-controls*="Ocean Trade Lanes"]',{ timeout: 3000 });
 
                 let airManifestRows = [];
                 let oceanManifestRows = [];
@@ -289,7 +290,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
                 // Should Have the button always if the Sp Btn found
                 await page.waitForSelector(
-                'button[aria-controls*="Customs Brokers"]',{ timeout: 5000 });
+                'button[aria-controls*="Customs Brokers"]',{ timeout: 3000 });
 
                 await page.evaluate(() => {
                     const btnCB = document.querySelector('button[aria-controls*="Customs Brokers"]');   
@@ -301,7 +302,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 await page.click('button[aria-controls*="Customs Brokers"]');
 
                 // Scrape Customs Broker Name and Number
-                await page.waitForSelector('div[data-state="active"] table tbody tr',{ timeout: 5000 });
+                await page.waitForSelector('div[data-state="active"] table tbody tr',{ timeout: 3000 });
 
                 let customsBrokers = await page.evaluate(() => {
                     const rows = document.querySelectorAll('div[data-state="active"] table tbody tr');
@@ -340,11 +341,17 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
         }
 
         if (urlYeti) {
+
+            const contentString = `Company We Know: Legal Name: ${legalName} Company Name: ${companyName} Location: ${location} Domain: ${domain},
+            Company to Compare: ${textData.slice(0, 2).join('\n')}`.trim();
+
+            console.log(contentString);
+            
             const chatCompletion = await openAIClient.chat.completions.create({
                 model : "gpt-4.1-nano",
                 messages : [
                     { role: "system", content: yetiPrompt },
-                    { role: "user",  content: textData.slice(0,2).join('\n') }
+                    { role: "user",  content: contentString }
                 ]
             });
 
@@ -373,7 +380,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
         const totalClearances = (r?.totalClearances || '').toString().replace(/,/g, '').replace(/"/g, '""');
         const totalShipments = (r?.totalShipments || '').toString().replace(/,/g, '').replace(/"/g, '""');
         const customsBroker = (r?.customsBrokersStr || '').replace(/"/g, '""');
-        const tradeData = (r?.tradeDataString || '').replace(/"/g, '""');
+        const tradeData = (r?.tradeDataStr || '').replace(/"/g, '""');
         const portTypeData = (r?.portTypeStr || '').replace(/"/g, '""');
 
 
@@ -394,7 +401,7 @@ async function clearAndType(page, selector, value) {
 
 async function getImporterDetailURL(page, selector) {
     try {
-        await page.waitForSelector(selector, { visible: true, timeout: 5000 });
+        await page.waitForSelector(selector, { visible: true, timeout: 3000 });
         const url = await page.$eval(selector, a => a.href);
         console.log('Importer detail URL:', url);
         return url;
@@ -415,7 +422,7 @@ async function getTradeLanesData(page, tab, domain, column1, column2) {
         }, tab);
         await page.click(`button[aria-controls*="${tab}"]`);
         
-        await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 5000});
+        await page.waitForSelector('div[data-state="active"] table tbody tr', {visible: true, timeout: 3000});
 
         // Scrape port + shipments per row
         const scrapedRows = await page.$$eval('div[data-state="active"] table tbody tr',
@@ -465,7 +472,7 @@ async function sortStringifyArray(inputArray, key1, key2, notportType) {
 
 async function findYetiLink(page) {
     try {
-        await page.waitForSelector('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', { visible: true, timeout: 5000 });
+        await page.waitForSelector('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', { visible: true, timeout: 3000 });
         const {url, textData} = await page.$$eval('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', companies => {
             const match = companies.find(company => company.closest("div")?.querySelector(".fflag.ff-sm.fflag-US"));
             if (!match) return {url:'', textData: []};
