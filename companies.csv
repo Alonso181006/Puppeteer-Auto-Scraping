@@ -1,9 +1,9 @@
-company_name,domain,legal_name
-Waggle,getyourwaggleon.com,Waggle Golf LLC
-Walmart,walmart.com,Walmart Inc.
-Target,target.com,Target Corporation
-Ford,ford.com,Ford Motor Company
-Boeing,boeing.com,The Boeing Company
-Honda,honda.com,American Honda Motor Co., Inc.
-Nike,nike.com,Nike, Inc.
-Fake,edfghuehduiefh.com, Fake Inc.
+company_name,domain,legal_name,hq_location
+Waggle,getyourwaggleon.com,Waggle Golf LLC,"Minneapolis, MN"
+Walmart,walmart.com,Walmart Inc.,"Bentonville, AR"
+Target,target.com,Target Corporation,"Minneapolis, MN"
+Ford,ford.com,Ford Motor Company,"Dearborn, MI"
+Boeing,boeing.com,The Boeing Company,"Arlington, VA"
+Honda,honda.com,American Honda Motor Co., Inc.,"Torrance, CA"
+Nike,nike.com,Nike, Inc.,"Beaverton, OR"
+Fake,edfghuehduiefh.com,Fake Inc.,"Unknown"

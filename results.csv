@@ -1,9 +1,9 @@
-Name,Url,Total Customs Clearances,Total Shipments,Customs Broker,Trade Data, Port Type
-"Waggle","https://app.revenuevessel.com/dashboard/importers/05f76c85-9d75-4238-9dca-dabf74356897",,1,"","", ""
-"Walmart","https://app.revenuevessel.com/dashboard/importers/f0a5308e-b2c0-4347-bc93-5615440752c5",292527,185428,"","", "Ocean-282337, Ambiguous-4050, Cross Border-2530, Air-1744"
-"Target","https://app.revenuevessel.com/dashboard/importers/4ffc530c-c59a-4613-a21c-30e537b0c90c",39956,432,"","", "Ocean-39352, Cross Border-281, Air-253, Ambiguous-70"
-"Ford","https://app.revenuevessel.com/dashboard/importers/29dc28e6-74b7-4710-8b0b-0ae87d840919",248464,12721,"","", "Cross Border-239681, Ambiguous-3737, Air-1872, Ocean-1624, Rail-383"
-"Boeing","https://app.revenuevessel.com/dashboard/importers/2f57527e-333b-443d-ba94-0145445cfac9",59965,4212,"","", "Air-37095, Ocean-5189, Cross Border-3437, Parcel-2904, Ambiguous-2852, Rail-570"
-"Honda","https://app.revenuevessel.com/dashboard/importers/9d293cb9-805a-4b4d-b1a3-89240bef715f",73215,389,"","", "Cross Border-69956, Ambiguous-1920, Air-790, Ocean-373, Parcel-166"
-"Nike","https://app.revenuevessel.com/dashboard/importers/bf457ba4-2619-4225-b0af-8dbdf61ef00a",30157,9958,"","", "Ocean-19719, Parcel-4114, Ambiguous-4051, Air-1545"
-"Fake","https://app.revenuevessel.com/dashboard/importers/f29f4783-230d-4196-adb9-77b79be31ac0",50,56,"","", "Ocean-50"
+Name,UrlRV,URLYeti,Total Customs Clearances,Total Shipments,Customs Broker,Trade Data, Port Type
+"Waggle","https://app.revenuevessel.com/dashboard/importers/05f76c85-9d75-4238-9dca-dabf74356897","https://www.importyeti.com/company/waggle-golf",,1,"","", ""
+"Walmart","https://app.revenuevessel.com/dashboard/importers/f0a5308e-b2c0-4347-bc93-5615440752c5","https://www.importyeti.com/company/walmart",292527,185428,"EXPEDITORS INTERNATIONAL-162544, UPS SUPPLY CHAIN SOLUTION-84017, GEODIS USA INC.-45953","", "Ocean-282337, Ambiguous-4050, Cross Border-2530, Air-1744"
+"Target","https://app.revenuevessel.com/dashboard/importers/4ffc530c-c59a-4613-a21c-30e537b0c90c","https://www.importyeti.com/company/target-stores-division-of-target-c",39956,432,"EXPEDITORS INTERNATIONAL-22439, TARGET CUSTOMS BROKERS, INC.-12314, MAERSK CUSTOMS SERVICES USA INC.-5177","", "Ocean-39352, Cross Border-281, Air-253, Ambiguous-70"
+"Ford","https://app.revenuevessel.com/dashboard/importers/29dc28e6-74b7-4710-8b0b-0ae87d840919","https://www.importyeti.com/company/ford-motor",248464,12721,"LIVINGSTON INTERNATIONAL INC.-247641, KPMG LLP-520, XPO CUSTOMS CLEARANCE SOLUTIONS, LL-214","", "Cross Border-239681, Ambiguous-3737, Air-1872, Ocean-1624, Rail-383"
+"Boeing","https://app.revenuevessel.com/dashboard/importers/2f57527e-333b-443d-ba94-0145445cfac9","https://www.importyeti.com/company/the-boeing-store",59965,4212,"FEDEX TRADE NETWORKS TRANS. & BROKE-57686, RADIX GROUP INTERNATIONAL INC-2278, CLEARFREIGHT, INC.-1","", "Air-37095, Ocean-5189, Cross Border-3437, Parcel-2904, Ambiguous-2852, Rail-570"
+"Honda","https://app.revenuevessel.com/dashboard/importers/9d293cb9-805a-4b4d-b1a3-89240bef715f","https://www.importyeti.com/company/american-honda-motor",73215,389,"EXPEDITORS INTERNATIONAL-39216, PAGE & JONES INC-33666, FEDEX TRADE NETWORKS TRANS. & BROKE-169","", "Cross Border-69956, Ambiguous-1920, Air-790, Ocean-373, Parcel-166"
+"Nike","https://app.revenuevessel.com/dashboard/importers/bf457ba4-2619-4225-b0af-8dbdf61ef00a","https://www.importyeti.com/company/nike-usa",30157,9958,"EXPEDITORS INTERNATIONAL-17803, CEVA INTERNATIONAL, INC.-7753, FEDEX TRADE NETWORKS TRANS. & BROKE-1964","", "Ocean-19719, Parcel-4114, Ambiguous-4051, Air-1545"
+"Fake","","https://www.importyeti.com/company/lda-inc",,,"","", ""
