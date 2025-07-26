@@ -6,6 +6,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 const { OpenAI } = require("openai");
 const path = require('path');
+const { url } = require('inspector');
 
 
 const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
@@ -15,10 +16,10 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     // -1. External Files Setup
 
     const countryPromptPath = path.join(__dirname, 'promptFindCountry.txt');
-    const promptYetiPath = path.join(__dirname, 'promptCheckYeti.txt');
+    // const promptYetiPath = path.join(__dirname, 'promptCheckYeti.txt');
     const portsPath = path.join(__dirname, 'ports_mapping.json')
     const countryPrompt = fs.readFileSync(countryPromptPath, 'utf-8');
-    const yetiPrompt = fs.readFileSync(promptYetiPath, 'utf-8');
+    // const yetiPrompt = fs.readFileSync(promptYetiPath, 'utf-8');
     const rawJSonPorts = fs.readFileSync(portsPath, 'utf-8');
     const portCountryMap = JSON.parse(rawJSonPorts);
 
@@ -26,7 +27,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     // 0. Load Domains from csv
     const companies = [];
     await new Promise((resolve, reject) => {
-        fs.createReadStream('clay10CompaniesTest.csv')
+        fs.createReadStream('clay5000.csv')
             .pipe(csv())
             .on('data', row => {
                 companies.push({
@@ -39,34 +40,30 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
             .on('end', () => resolve())
             .on('error', reject);
     });
+
+    //Set Results Header 
+    const header = 'Name,UrlRV,URLYeti,Total Customs Clearances,Total Shipments,Customs Broker,Trade Data, Port Type\n';
+    fs.writeFileSync('results.csv', header);
     
     console.log(`Loaded ${companies.length} companies from CSV`);
 
     // 1. Launch browser
-    const browser = await puppeteer.launch({
+    let browser = await puppeteer.launch({
     headless: false,                     
     defaultViewport: null,
+    executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", 
+    userDataDir: "/Users/abastida/Library/Application Support/Google/Chrome/Default", 
     args: ['--start-maximized']
     });
-    const page = await browser.newPage();
+    let page = await browser.newPage();
 
-    // 2. Log in
-        //Yeti
-    await page.goto('https://www.importyeti.com/login', { waitUntil: 'networkidle2' });
-    await page.type('#email', process.env.YETI_USER);
-    await page.type('#password', process.env.YETI_PASS);
-    await Promise.all([
-    page.click('button[type="submit"]'),
-    page.waitForNavigation({ waitUntil: 'networkidle2' })
-    ]);
-
-        // Rev Vessel
+    // 2. Log in - Rev Vessel
     await page.goto('https://app.revenuevessel.com/login', { waitUntil: 'networkidle2' });
     await page.type('#email', process.env.RV_USER);
     await page.type('#password', process.env.RV_PASS);
     await Promise.all([
-    page.click('button[type="submit"]'),
-    page.waitForNavigation({ waitUntil: 'networkidle2' })
+    await page.click('button[type="submit"]'),
+    await page.waitForNavigation({ waitUntil: 'networkidle2' })
     ]);
 
     console.log('Logged in');
@@ -74,11 +71,38 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
     // 3. Loop over domains
     const typeBoxRV = 'input[placeholder="Search by company or domain name"]';
-    const typeBoxYeti = "input[placeholder=\"Find Any Company's Suppliers\"]";
+    // const typeBoxYeti = "input[placeholder=\"Find Any Company's Suppliers\"]";
     const linkSelectorRV = 'table tbody tr td a.text-indigo-600';
-    const results = [];
+    let results = [];
 
     for (let i = 0; i < companies.length; i++) {
+        // if (i % 2 === 0 && i !== 0) {
+        //     await browser.close();
+
+        //     browser = await puppeteer.launch({
+        //     headless: false,                     
+        //     defaultViewport: null,
+        //     executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", 
+        //     userDataDir: "/Users/abastida/Library/Application Support/Google/Chrome/Default", 
+        //     args: ['--start-maximized']
+        //     });
+        //     page = await browser.newPage();
+
+        //         // 2. Log in - Rev Vessel
+        //     await page.goto('https://app.revenuevessel.com/login', { waitUntil: 'networkidle2' });
+        //     await page.type('#email', process.env.RV_USER);
+        //     await page.type('#password', process.env.RV_PASS);
+        //     await Promise.all([
+        //     page.click('button[type="submit"]'),
+        //     page.waitForNavigation({ waitUntil: 'networkidle2' })
+        //     ]);
+
+        //     console.log('Logged in');
+        //     await importYetiLogIn(page);
+        //     await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2'});
+
+
+        // }
         const { domain, companyName, legalName, location } = companies[i];
 
         let urlRV = "";
@@ -92,18 +116,20 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
 
         // Domain Check
         await clearAndType(page, typeBoxRV, domain);
-        urlRV = await getImporterDetailURL(page, linkSelectorRV);
-        
-        const searchVariants = [legalName, companyName, companyName.replace(/\s+/g, ''), legalName.replace(/\s+/g, '')];
-        if (!urlRV) {
-            await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2' });
+        urlRV = await getImporterDetailURL(page, linkSelectorRV, domain);
 
-            for (const term of searchVariants) {
-                if (urlRV) break; // Already found a match
-                await clearAndType(page, typeBoxRV, term);
-                urlRV = await getImporterDetailURL(page, linkSelectorRV);
-            }
-        }        
+        const searchVariants = [legalName, companyName, companyName.replace(/\s+/g, ''), legalName.replace(/\s+/g, '')];
+
+        // Exact !!!
+        // if (!urlRV) {
+        //     await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2' });
+
+        //     for (const term of searchVariants) {
+        //         if (urlRV) break; // Already found a match
+        //         await clearAndType(page, typeBoxRV, term);
+        //         urlRV = await getImporterDetailURL(page, linkSelectorRV);
+        //     }
+        // }        
 
         // Fuzzy Seach !!!
         // if (!url) {
@@ -172,7 +198,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
                 // 2. Grab the first such <dd>
                 totalShipments = await page.$eval(
                 'div[data-state="active"] dd.text-gray-900',dd => dd.textContent.trim());
-                console.log('Total Shipments:', totalShipments);``
+                console.log('Total Shipments:', totalShipments);
 
             } catch (err) {
                 console.warn(`Skipping Scraping Summary Data from ${domain} because: ${err.message}`);
@@ -327,41 +353,66 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
             }
         }
         // Import Yeti
-        await page.goto('https://www.importyeti.com', { waitUntil: 'networkidle2' });
+        // if (i % 5 === 0) {
+        //     await importYetiLogIn(page);
+        // }
 
-        for (const term of searchVariants) {
-            if (urlYeti) break; // Already found a match
-            await clearAndType(page, typeBoxYeti, term);
-            await page.click('button[aria-label="Search button"]', {timeout: 10000});
-            ({url:urlYeti, textData} = await findYetiLink(page));
-            console.log("Url:", urlYeti);
-            console.log("Data:", textData)
-            await new Promise(resolve => setTimeout(resolve, 2000));
+        // await page.goto('https://www.importyeti.com', { waitUntil: 'networkidle2' });
 
-        }
+        // for (const term of searchVariants) {
+        //     if (urlYeti) break; // Already found a match
+        //     await clearAndType(page, typeBoxYeti, term);
+        //     await page.click('button[aria-label="Search button"]', {timeout: 1000});
+        //     console.log("clicked");
+        //     ({url:urlYeti, textData} = await findYetiLink(page));
+        //     console.log("after search");
+        //     console.log("Url:", urlYeti);
+        //     console.log("Data:", textData)
+        //     await new Promise(resolve => setTimeout(resolve, 2000));
+        // }
 
-        if (urlYeti) {
+        // if (urlYeti) {
 
-            const contentString = `Company We Know: Legal Name: ${legalName} Company Name: ${companyName} Location: ${location} Domain: ${domain},
-            Company to Compare: ${textData.slice(0, 2).join('\n')}`.trim();
+        //     const contentString = `Company We Know: Legal Name: ${legalName} Company Name: ${companyName} Location: ${location} Domain: ${domain},
+        //     Company to Compare: ${textData.slice(0, 2).join('\n')}`.trim();
 
-            console.log(contentString);
+        //     console.log(contentString);
             
-            const chatCompletion = await openAIClient.chat.completions.create({
-                model : "gpt-4.1-nano",
-                messages : [
-                    { role: "system", content: yetiPrompt },
-                    { role: "user",  content: contentString }
-                ]
+        //     const chatCompletion = await openAIClient.chat.completions.create({
+        //         model : "gpt-4.1-nano",
+        //         messages : [
+        //             { role: "system", content: yetiPrompt },
+        //             { role: "user",  content: contentString }
+        //         ]
+        //     });
+
+        //     const reply = chatCompletion.choices[0].message.content.trim();
+        //     if (!JSON.parse(reply).same_company) urlYeti = "";
+
+        // }
+
+        console.log(companyName, urlRV, totalClearances, totalShipments, customsBrokersStr, tradeDataStr, portTypeStr);
+        results.push({companyName, urlRV, totalClearances, totalShipments, customsBrokersStr, tradeDataStr, portTypeStr});
+
+        if ( i % 2 === 0)  {
+            // 5. Write results to CSV
+            const csvLines = results.map(r => {
+                const name = (r?.companyName || '').toString().replace(/"/g, '""');
+                const urlRV = (r?.urlRV || '').toString().replace(/"/g, '""');
+                // const urlYeti = (r?.urlYeti || '').toString().replace(/"/g, '""');
+
+                const totalClearances = (r?.totalClearances || '').toString().replace(/,/g, '').replace(/"/g, '""');
+                const totalShipments = (r?.totalShipments || '').toString().replace(/,/g, '').replace(/"/g, '""');
+                const customsBroker = (r?.customsBrokersStr || '').replace(/"/g, '""');
+                const tradeData = (r?.tradeDataStr || '').replace(/"/g, '""');
+                const portTypeData = (r?.portTypeStr || '').replace(/"/g, '""');
+
+                return `"${name}","${urlRV}",${totalClearances},${totalShipments},"${customsBroker}","${tradeData}", "${portTypeData}"`;
             });
-
-            const reply = chatCompletion.choices[0].message.content.trim();
-            if (!JSON.parse(reply).same_company) urlYeti = "";
-
+            const content = (i === 0) ? csvLines.join('\n') : '\n' + csvLines.join('\n');
+            fs.writeFileSync('results.csv', content, { flag: 'a' });            
+            results = [];
         }
-
-        console.log(companyName, urlRV, urlYeti, totalClearances, totalShipments, customsBrokersStr, tradeDataStr, portTypeStr);
-        results.push({companyName, urlRV, urlYeti, totalClearances, totalShipments, customsBrokersStr, tradeDataStr, portTypeStr});
 
         await page.goto('https://app.revenuevessel.com/dashboard/importers', { waitUntil: 'networkidle2'});
     }
@@ -369,26 +420,24 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     // 4. (For now) just close
     await browser.close();
 
-    // 5. Write results to CSV
-    const header = 'Name,UrlRV,URLYeti,Total Customs Clearances,Total Shipments,Customs Broker,Trade Data, Port Type\n';
+    if (results.length > 0) {
+        // 5. Write results to CSV
+        const csvLines = results.map(r => {
+            const name = (r?.companyName || '').toString().replace(/"/g, '""');
+            const urlRV = (r?.urlRV || '').toString().replace(/"/g, '""');
+            const urlYeti = (r?.urlYeti || '').toString().replace(/"/g, '""');
 
-    const csvLines = results.map(r => {
-        const name = (r?.companyName || '').toString().replace(/"/g, '""');
-        const urlRV = (r?.urlRV || '').toString().replace(/"/g, '""');
-        const urlYeti = (r?.urlYeti || '').toString().replace(/"/g, '""');
+            const totalClearances = (r?.totalClearances || '').toString().replace(/,/g, '').replace(/"/g, '""');
+            const totalShipments = (r?.totalShipments || '').toString().replace(/,/g, '').replace(/"/g, '""');
+            const customsBroker = (r?.customsBrokersStr || '').replace(/"/g, '""');
+            const tradeData = (r?.tradeDataStr || '').replace(/"/g, '""');
+            const portTypeData = (r?.portTypeStr || '').replace(/"/g, '""');
 
-        const totalClearances = (r?.totalClearances || '').toString().replace(/,/g, '').replace(/"/g, '""');
-        const totalShipments = (r?.totalShipments || '').toString().replace(/,/g, '').replace(/"/g, '""');
-        const customsBroker = (r?.customsBrokersStr || '').replace(/"/g, '""');
-        const tradeData = (r?.tradeDataStr || '').replace(/"/g, '""');
-        const portTypeData = (r?.portTypeStr || '').replace(/"/g, '""');
-
-
-    return `"${name}","${urlRV}","${urlYeti}",${totalClearances},${totalShipments},"${customsBroker}","${tradeData}", "${portTypeData}"`;
-    });
-
-    fs.writeFileSync('results.csv', header + csvLines.join('\n'));
-
+            return `"${name}","${urlRV}","${urlYeti}",${totalClearances},${totalShipments},"${customsBroker}","${tradeData}", "${portTypeData}"`;
+        });
+        fs.writeFileSync('results.csv', '\n' + csvLines.join('\n'), {flag: 'a'});
+        results = [];
+    }
 })();
 
 async function clearAndType(page, selector, value) {
@@ -396,18 +445,28 @@ async function clearAndType(page, selector, value) {
     await page.keyboard.press('Backspace');
     console.log(value);
     await page.type(selector, value);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 3000))
 }
 
-async function getImporterDetailURL(page, selector) {
+async function getImporterDetailURL(page, selector, domain) {
     try {
         await page.waitForSelector(selector, { visible: true, timeout: 3000 });
-        const url = await page.$eval(selector, a => a.href);
-        console.log('Importer detail URL:', url);
-        return url;
+        const urls = await page.$$eval(selector, rows =>
+            rows.map(a => a.href)
+        );
+
+        for (const url of urls) {
+            if (await checkRevVesselUrl(url, domain, page)) {
+                console.log('Importer detail URL:', url);
+                return url;
+            }
+        }
+
+        console.log("No matching URL found.");
+        return '';
     } catch (err) {
         console.log("No results:", err.message,); 
-        return url = '';
+        return '';
     }
 }
 
@@ -474,12 +533,19 @@ async function findYetiLink(page) {
     try {
         await page.waitForSelector('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', { visible: true, timeout: 3000 });
         const {url, textData} = await page.$$eval('.bg-yeti-neutral-05.hover\\:bg-yeti-neutral-10', companies => {
-            const match = companies.find(company => company.closest("div")?.querySelector(".fflag.ff-sm.fflag-US"));
+            const match = companies.find(company => {
+                const nameText = company.querySelector("a")?.textContent?.toLowerCase() || "";
+                const hasCanada = nameText.includes("canada");
+                const isUS = company.querySelector(".fflag.ff-sm.fflag-US");
+
+                return !hasCanada && isUS;
+            });
+
             if (!match) return {url:'', textData: []};
             const anchor = match.querySelector("a[href]");
             const url =  anchor ? anchor.href : '';
 
-            const rawData = [...match.closest("div")?.querySelectorAll('.relative.w-full')];
+            const rawData = [...match.querySelectorAll('.relative.w-full')];
             const textData = rawData.map(el => {
                 return el.textContent.trim();
             });
@@ -487,6 +553,9 @@ async function findYetiLink(page) {
             return {url, textData};
 
         });
+
+         await new Promise(resolve => setTimeout(resolve, 10000))
+
 
         if (await isDateRecent(textData)){
             return {url, textData};
@@ -510,4 +579,38 @@ async function isDateRecent(textData) {
         return (shipmentDate >= cutoff);
     }
     return false;
+}
+
+async function importYetiLogIn(page) {
+    await page.goto('https://www.importyeti.com/login', { waitUntil: 'networkidle2' });
+    await page.type('#email', process.env.YETI_USER);
+    await page.type('#password', process.env.YETI_PASS);
+    await Promise.all([
+    await page.click('button[type="submit"]'),
+    await page.waitForNavigation({ waitUntil: 'networkidle2' })
+    ]);
+}
+
+async function checkRevVesselUrl(urlRV, domain, page) {
+    if (urlRV) {
+        await page.goto(urlRV, { waitUntil: 'networkidle2' });
+        const website = await page.evaluate(() => {
+            const allLabels = [...document.querySelectorAll('dt')];
+            for (const label of allLabels) {
+                if (label.textContent.trim() === 'Company Website') {
+                    const link = label.nextElementSibling?.querySelector('a');
+                    return link?.href || null;
+                }
+            }
+            return null;
+        });
+
+        const hostname = new URL(website).hostname;
+        const webDomain = hostname.replace(/^www\./, '').toString();
+
+        console.log("Result: ", webDomain);
+        console.log("FirstEmail: ", domain);
+
+        return (domain === webDomain);
+    }
 }
