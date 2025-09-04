@@ -27,7 +27,7 @@ const openAIClient = new OpenAI({apiKey:process.env.OPEN_API_KEY});
     // 0. Load Domains from csv
     const companies = [];
     await new Promise((resolve, reject) => {
-        fs.createReadStream('clay10Test.csv')
+        fs.createReadStream('clayData/clay10Test.csv')
             .pipe(csv())
             .on('data', row => {
                 companies.push({
